@@ -1,4 +1,6 @@
 from datetime import datetime
+from dataclasses import dataclass
+from typing import Optional
 
 from kivy.animation import Animation
 from kivy.clock import Clock
@@ -14,7 +16,8 @@ from kivy.graphics import (
     StencilUse,
 )
 from kivy.metrics import dp
-from kivy.properties import ListProperty
+from kivy.properties import BooleanProperty, ListProperty, StringProperty
+from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.image import Image
@@ -649,6 +652,461 @@ def add_debug_outline(widget, color=(1, 0, 0, 1), line_width=1.5):
         )
 
     widget.bind(pos=update_debug_line, size=update_debug_line)
+
+
+@dataclass
+class InstructionPanel:
+    """Represents a single slide in the instruction overlay."""
+
+    title: str = ""
+    body: str = ""
+    image: Optional[str] = None
+
+
+class InstructionNavButton(ButtonBehavior, RelativeLayout):
+    """
+    Arrow control used to move forward/backward through the instruction slides.
+    """
+
+    disabled = BooleanProperty(False)
+    direction = StringProperty("left")
+
+    def __init__(self, direction="left", **kwargs):
+        kwargs.setdefault("size_hint", (None, 1))
+        kwargs.setdefault("width", dp(72))
+        super().__init__(**kwargs)
+        self.direction = direction
+
+        self.ripple_alpha = 0
+        self.ripple_pos = (0, 0)
+        self.ripple_radius = 0
+
+        self.active_color = (0.13, 0.34, 0.75, 1)
+        self.inactive_color = (0.7, 0.7, 0.7, 0.55)
+        self.active_arrow_color = (1, 1, 1, 1)
+        self.inactive_arrow_color = (0.25, 0.25, 0.25, 1)
+
+        with self.canvas.before:
+            self.bg_color_instruction = Color(*self._current_bg_color())
+            # Draw background in local widget coordinates to avoid layout offsets.
+            self.bg = RoundedRectangle(pos=(0, 0), size=self.size, radius=[dp(22)] * 4)
+
+        with self.canvas:
+            StencilPush()
+            self.stencil_shape = RoundedRectangle(pos=(0, 0), size=self.size, radius=[dp(22)] * 4)
+            StencilUse()
+
+            self.ripple_color_instruction = Color(1, 1, 1, self.ripple_alpha)
+            self.ripple = Ellipse(size=(0, 0))
+
+            StencilPop()
+
+        arrow_src = "assets/LNav.png" if self.direction == "left" else "assets/RNav.png"
+        self.arrow_image = Image(
+            source=arrow_src,
+            allow_stretch=True,
+            keep_ratio=True,
+            color=self._current_arrow_color(),
+            size_hint=(0.75, 0.75),
+            pos_hint={"center_x": 0.5, "center_y": 0.5},
+        )
+        self.add_widget(self.arrow_image)
+
+        self.bind(pos=self._update_graphics, size=self._update_graphics, disabled=self._refresh_colors)
+
+    def _current_bg_color(self):
+        return self.inactive_color if self.disabled else self.active_color
+
+    def _current_arrow_color(self):
+        return self.inactive_arrow_color if self.disabled else self.active_arrow_color
+
+    def _refresh_colors(self, *args):
+        self.bg_color_instruction.rgba = self._current_bg_color()
+        self.arrow_image.color = self._current_arrow_color()
+
+    def _update_graphics(self, *args):
+        self.bg.pos = (0, 0)
+        self.bg.size = self.size
+        # Image centers via pos_hint; no manual text_size needed.
+        self.stencil_shape.pos = (0, 0)
+        self.stencil_shape.size = self.size
+
+        self.ripple_color_instruction.rgba = (1, 1, 1, self.ripple_alpha)
+        r = self.ripple_radius
+        self.ripple.size = (r * 2, r * 2)
+        self.ripple.pos = (self.ripple_pos[0] - r, self.ripple_pos[1] - r)
+
+    def reset_ripple(self, *args):
+        self.ripple_radius = 0
+        self.ripple_alpha = 0
+        self._update_graphics()
+
+    def on_touch_down(self, touch):
+        if self.disabled:
+            return False
+        if self.collide_point(*touch.pos):
+            self.ripple_pos = (touch.x - self.x, touch.y - self.y)
+            self.ripple_radius = 0
+            self.ripple_alpha = 0.35
+            max_r = max(self.width, self.height) * 1.2
+
+            expand = Animation(ripple_radius=max_r, d=0.23, t="out_quad")
+            fade = Animation(ripple_alpha=0, d=0.18, t="out_quad")
+            anim = expand + fade
+            anim.bind(on_progress=lambda *a: self._update_graphics())
+            anim.bind(on_complete=self.reset_ripple)
+            anim.start(self)
+
+        return super().on_touch_down(touch)
+
+    def on_touch_up(self, touch):
+        if self.disabled:
+            return False
+        return super().on_touch_up(touch)
+
+
+class OverlayCloseButton(ButtonBehavior, RelativeLayout):
+    """Circular close control that sits in the top-left of the overlay."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("size_hint", (None, None))
+        kwargs.setdefault("size", (dp(64), dp(64)))
+        super().__init__(**kwargs)
+
+        with self.canvas.before:
+            Color(0.86, 0.24, 0.24, 1)
+            self.circle = Ellipse(pos=self.pos, size=self.size)
+
+        self.x_label = Label(
+            text="✕",
+            font_size="26sp",
+            color=(1, 1, 1, 1),
+            bold=True,
+            halign="center",
+            valign="middle",
+            size_hint=(1, 1),
+            text_size=(0, 0),
+        )
+        self.add_widget(self.x_label)
+
+        self.bind(pos=self._update_graphics, size=self._update_graphics)
+
+    def _update_graphics(self, *args):
+        self.circle.pos = self.pos
+        self.circle.size = self.size
+        self.x_label.text_size = self.size
+
+
+class MultiStepInstructionOverlay(RelativeLayout):
+    """
+    Fullscreen overlay used to present a multi-step instruction flow.
+
+    Each slide is an InstructionPanel with title, body, and optional image. The
+    overlay renders the current slide and exposes next/previous controls plus a
+    close button.
+    """
+
+    def __init__(self, instructions=None, on_close=None, **kwargs):
+        kwargs.setdefault("size_hint", (1, 1))
+        kwargs.setdefault("pos_hint", {"x": 0, "y": 0})
+        super().__init__(**kwargs)
+
+        self.instructions = instructions or []
+        self.current_index = 0
+        self.on_close = on_close
+        self._resize_event = None
+
+        with self.canvas.before:
+            self.backdrop_color = Color(0, 0, 0, 0.0)
+            self.backdrop = RoundedRectangle(pos=self.pos, size=self.size)
+
+        self.bind(pos=self._update_backdrop, size=self._update_backdrop)
+
+        self.close_btn = OverlayCloseButton(pos_hint={"x": 0.02, "top": 0.97})
+        self.close_btn.bind(on_release=self.close_overlay)
+        self.add_widget(self.close_btn)
+
+        self.wrapper = AnchorLayout(
+            anchor_x="center",
+            anchor_y="center",
+            size_hint=(0.94, None),
+            pos_hint={"center_x": 0.5, "center_y": 0.5},
+            height=dp(520),
+            opacity=0,
+        )
+        self.add_widget(self.wrapper)
+
+        self.row = BoxLayout(
+            orientation="horizontal",
+            spacing=dp(20),
+            size_hint=(None, None),
+        )
+        self.wrapper.add_widget(self.row)
+
+        self.left_nav = InstructionNavButton(direction="left", size_hint=(None, None))
+        self.left_nav.bind(on_release=self.previous_slide)
+        self.row.add_widget(self.left_nav)
+
+        self.content_holder = BoxLayout(orientation="horizontal", spacing=dp(20), size_hint=(None, None))
+        self.row.add_widget(self.content_holder)
+
+        self.right_nav = InstructionNavButton(direction="right", size_hint=(None, None))
+        self.right_nav.bind(on_release=self.next_slide)
+        self.row.add_widget(self.right_nav)
+
+        self.left_container = uni_centerBox(size_hint=(None, None))
+        self.left_container.content.padding = [dp(24), dp(24), dp(24), dp(24)]
+        self.left_container.content.spacing = dp(10)
+        self.content_holder.add_widget(self.left_container)
+        self.left_container.bind(size=self._schedule_resize)
+
+        self.title_label = Label(
+            text="",
+            font_size="22sp",
+            bold=True,
+            color=(0, 0, 0, 1),
+            halign="left",
+            valign="top",
+            size_hint_y=None,
+            text_size=(0, 0),
+        )
+        self.body_label = Label(
+            text="",
+            font_size="18sp",
+            color=(0, 0, 0, 1),
+            halign="left",
+            valign="top",
+            size_hint_y=None,
+            text_size=(0, 0),
+        )
+        self._bind_label_wrapping(self.title_label)
+        self._bind_label_wrapping(self.body_label)
+
+        self.left_container.add_widget(self.title_label)
+        self.left_container.add_widget(self.body_label)
+
+        self.right_container = uni_centerBox(size_hint=(None, None))
+        self.right_container.content.padding = [dp(10), dp(10), dp(10), dp(10)]
+        self.right_container.content.spacing = dp(0)
+        self.content_holder.add_widget(self.right_container)
+        self.right_container.bind(size=self._schedule_resize)
+
+        self.right_display = RelativeLayout(size_hint=(1, 1))
+        self.right_container.add_widget(self.right_display)
+
+        self.image_widget = Image(
+            allow_stretch=True,
+            keep_ratio=True,
+            size_hint=(1, 1),
+            pos_hint={"x": 0, "y": 0},
+        )
+        self.placeholder_label = Label(
+            text="[Title]",
+            font_size="22sp",
+            color=(0, 0, 0, 0.7),
+            halign="center",
+            valign="middle",
+            size_hint=(1, 1),
+            text_size=(0, 0),
+        )
+        self.placeholder_label.bind(size=self._update_placeholder_text_size)
+
+        self.right_display.add_widget(self.image_widget)
+        self.right_display.add_widget(self.placeholder_label)
+
+        self.opacity = 0
+        self.wrapper.bind(size=self._schedule_resize)
+        Clock.schedule_once(lambda dt: self._resize_containers(), 0)
+        Clock.schedule_once(lambda dt: self._animate_in(), 0)
+
+        self._update_slide_content()
+
+    def _bind_label_wrapping(self, label):
+        def update_text_size(*args):
+            label.text_size = (label.width, None)
+
+        def update_height(instance, texture_size):
+            instance.height = texture_size[1]
+
+        label.bind(size=update_text_size, texture_size=update_height)
+
+    def _update_placeholder_text_size(self, instance, size):
+        instance.text_size = size
+
+    def _update_backdrop(self, *args):
+        self.backdrop.pos = self.pos
+        self.backdrop.size = self.size
+        # maintain a soft, dialog-like dim
+        self.backdrop.radius = [0]
+
+    def set_instructions(self, instructions):
+        """Replace the current instruction list and reset to the first slide."""
+        self.instructions = instructions or []
+        self.current_index = 0
+        self._update_slide_content()
+
+    def next_slide(self, *args):
+        if not self.instructions:
+            return
+        if self.current_index < len(self.instructions) - 1:
+            self.current_index += 1
+            self._update_slide_content()
+
+    def previous_slide(self, *args):
+        if not self.instructions:
+            return
+        if self.current_index > 0:
+            self.current_index -= 1
+            self._update_slide_content()
+
+    def _update_slide_content(self):
+        if not self.instructions:
+            self.title_label.text = ""
+            self.body_label.text = ""
+            self.image_widget.source = ""
+            self.image_widget.opacity = 0
+            self.placeholder_label.opacity = 1
+            self.placeholder_label.text = "[Title]"
+            self.left_nav.disabled = True
+            self.right_nav.disabled = True
+            return
+
+        slide = self.instructions[self.current_index]
+        self.title_label.text = slide.title
+        self.body_label.text = slide.body
+
+        if slide.image:
+            self.image_widget.source = slide.image
+            self.image_widget.opacity = 1
+            self.placeholder_label.opacity = 0
+        else:
+            self.image_widget.source = ""
+            self.image_widget.opacity = 0
+            self.placeholder_label.text = slide.title or "[Title]"
+            self.placeholder_label.opacity = 1
+
+        self.left_nav.disabled = self.current_index == 0
+        self.right_nav.disabled = self.current_index >= len(self.instructions) - 1
+
+    def close_overlay(self, *args):
+        self._animate_out()
+
+    def on_touch_down(self, touch):
+        """
+        Always consume touches so widgets behind the overlay are not interactive.
+        """
+        # Tap outside the content to dismiss, similar to confirmOverlay behavior.
+        if not self.row.collide_point(*touch.pos) and not self.close_btn.collide_point(*touch.pos):
+            self.close_overlay()
+            return True
+
+        # Let children (nav/buttons) handle it, but stop propagation to layers beneath.
+        super().on_touch_down(touch)
+        return True
+
+    # --- Layout helpers ---
+    def _schedule_resize(self, *args):
+        if self._resize_event is None:
+            self._resize_event = Clock.schedule_once(self._resize_containers, 0)
+
+    def _resize_containers(self, *args):
+        """
+        Keeps the left/right content containers square, constrained by the wrapper
+        height and available width between nav buttons. Debounced to avoid layout loops.
+        """
+        self._resize_event = None
+
+        available_width = max(
+            0,
+            self.wrapper.width
+            - self.left_nav.width
+            - self.right_nav.width
+            - self.row.spacing * 2,
+        )
+        square_size = min(available_width / 2.0, self.wrapper.height)
+        square_size = max(square_size, 0)
+
+        def _apply_size(widget, size):
+            if abs(widget.width - size) > 0.5 or abs(widget.height - size) > 0.5:
+                widget.size_hint = (None, None)
+                widget.width = size
+                widget.height = size
+
+        _apply_size(self.left_container, square_size)
+        _apply_size(self.right_container, square_size)
+
+        if abs(self.content_holder.height - square_size) > 0.5:
+            self.content_holder.size_hint = (None, None)
+            self.content_holder.height = square_size
+            self.content_holder.width = square_size * 2 + self.row.spacing
+
+        # Stretch nav arrows to match the square block height for visual alignment.
+        # Keep nav backgrounds consistent: fixed width, match content (left container) height, force redraw.
+        nav_height = self.left_container.height
+        nav_size = (dp(72), nav_height)
+
+        self.left_nav.size_hint = (None, None)
+        self.left_nav.size = nav_size
+        self.left_nav._update_graphics()
+
+        self.right_nav.size_hint = (None, None)
+        self.right_nav.size = nav_size
+        self.right_nav._update_graphics()
+
+        # Sync row and wrapper height to nav/content block height for vertical centering.
+        if abs(self.row.height - nav_height) > 0.5:
+            self.row.height = nav_height
+        if abs(self.wrapper.height - nav_height) > 0.5:
+            self.wrapper.height = nav_height
+
+        # Update the row width/height so AnchorLayout keeps it centered.
+        row_width = (
+            self.left_nav.width
+            + self.row.spacing
+            + self.content_holder.width
+            + self.row.spacing
+            + self.right_nav.width
+        )
+        if abs(self.row.width - row_width) > 0.5:
+            self.row.width = row_width
+        if abs(self.row.height - square_size) > 0.5:
+            self.row.height = square_size
+
+    # --- Animations ---
+    def _animate_in(self):
+        # Backdrop fade-in
+        Animation.cancel_all(self, "opacity")
+        Animation.cancel_all(self.wrapper, "opacity", "y")
+        target_y = self.wrapper.y
+        self.wrapper.y = target_y - dp(24)
+        self.opacity = 0
+        self.wrapper.opacity = 0
+
+        fade_in = Animation(opacity=1, d=0.18, t="out_quad")
+        rise_in = Animation(opacity=1, y=target_y, d=0.2, t="out_quad")
+        fade_bg = Animation(rgba=(0, 0, 0, 0.6), d=0.18, t="out_quad")
+
+        fade_in.start(self)
+        rise_in.start(self.wrapper)
+        fade_bg.start(self.backdrop_color)
+
+    def _animate_out(self):
+        def _finish(*_):
+            if callable(self.on_close):
+                self.on_close()
+            if self.parent:
+                self.parent.remove_widget(self)
+
+        Animation.cancel_all(self, "opacity")
+        Animation.cancel_all(self.wrapper, "opacity", "y")
+        fade_out = Animation(opacity=0, d=0.15, t="out_quad")
+        drop_out = Animation(opacity=0, y=self.wrapper.y - dp(20), d=0.15, t="out_quad")
+        fade_bg = Animation(rgba=(0, 0, 0, 0.0), d=0.15, t="out_quad")
+
+        fade_out.bind(on_complete=_finish)
+        fade_out.start(self)
+        drop_out.start(self.wrapper)
+        fade_bg.start(self.backdrop_color)
 
 
 class RoundedLabelBox(BoxLayout):

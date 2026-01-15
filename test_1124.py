@@ -7,8 +7,8 @@ from pretest import pretest
 
 class MyApp(MDApp):
     def build(self):
-        Window.clearcolor = (1, 1, 1, 1)    
-        return testScreenLive()
+        #Window.clearcolor = (1, 1, 1, 1)    
+        return pretest()
 
 if __name__ == "__main__":
     MyApp().run()

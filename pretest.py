@@ -1,5 +1,6 @@
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.floatlayout import FloatLayout
+from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.floatlayout import MDFloatLayout
+from kivymd.uix.screen import MDScreen
 from kivy.uix.anchorlayout import AnchorLayout
 from kivy.metrics import dp
 from kivy.core.window import Window
@@ -17,6 +18,8 @@ from mdWidgets import (
     uni_homeButton,
     genButton,
     LoadingBar,
+    InstructionPanel,
+    MultiStepInstructionOverlay,
 )
 
 
@@ -37,7 +40,7 @@ def add_debug_outline(widget, color=(1, 0, 0, 1), line_width=1.5):
             width=line_width,
         )
 
-class pretest(FloatLayout):
+class pretest(MDScreen):
     def on_confirm(self):
         print("Confirmation accepted!")
 
@@ -45,6 +48,7 @@ class pretest(FloatLayout):
         super().__init__(**kwargs)
 
         # 🔥 FORCE ROOT TO FILL THE SCREEN
+        self.md_bg_color = (1, 1, 1, 1)
         self.size_hint = (1, 1)
         self.size = Window.size
 
@@ -86,7 +90,7 @@ class pretest(FloatLayout):
             height=dp(48)
         )
 
-        input_row = BoxLayout(
+        input_row = MDBoxLayout(
             orientation="horizontal",
             size_hint=(1, None),
             padding=[dp(30), dp(0), dp(30), dp(0)],
@@ -179,4 +183,42 @@ class pretest(FloatLayout):
         print(f"Starting test: {name}")
 
     def on_view_instructions(self, *args):
-        print("Instructions requested.")
+        slides = self._build_instruction_slides()
+
+        if getattr(self, "instruction_overlay", None) and self.instruction_overlay.parent:
+            self.remove_widget(self.instruction_overlay)
+
+        self.instruction_overlay = MultiStepInstructionOverlay(
+            instructions=slides,
+            on_close=self._dismiss_instruction_overlay,
+        )
+        self.add_widget(self.instruction_overlay)
+
+    # --- Instruction overlay helpers ---
+    def _dismiss_instruction_overlay(self, *args):
+        if getattr(self, "instruction_overlay", None) and self.instruction_overlay.parent:
+            self.remove_widget(self.instruction_overlay)
+        self.instruction_overlay = None
+
+    def _build_instruction_slides(self):
+        """
+        Returns the list of instruction panels shown in the multi-step overlay.
+        Add/update steps here; image paths are optional.
+        """
+        return [
+            InstructionPanel(
+                title="Introduction",
+                body="Have the sample collection kit and POCT device ready.\n1. Swab\n2. Tube A\n3. Tube B\n4. Tube C\n5. POCT Device",
+                image=None,
+            ),
+            InstructionPanel(
+                title="Step 1. Preparation",
+                body="Make sure to rinse your mouth with water before proceeding.\n\nRemove the Swab from its package. ",
+                image=None,
+            ),
+            InstructionPanel(
+                title="Step 2. Mouth Swab",
+                body="Insert the Swab into your mouth, and firmly brush the Swab on top of your tongue up and down for 30 seconds.",
+                image=None,
+            ),
+        ]

@@ -1,5 +1,6 @@
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.floatlayout import FloatLayout
+from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.floatlayout import MDFloatLayout
+from kivymd.uix.screen import MDScreen
 from kivy.metrics import dp
 from kivy.core.window import Window
 from kivy.graphics import Color, BoxShadow, RoundedRectangle, Line
@@ -33,7 +34,7 @@ def add_debug_outline(widget, color=(1, 0, 0, 1), line_width=1.5):
             width=line_width,
         )
 
-class testScreenLive(FloatLayout):
+class testScreenLive(MDScreen):
     def on_confirm(self):
         print("Confirmation accepted!")
 
@@ -41,6 +42,7 @@ class testScreenLive(FloatLayout):
         super().__init__(**kwargs)
 
         # 🔥 FORCE ROOT TO FILL THE SCREEN
+        self.md_bg_color = (1, 1, 1, 1)
         self.size_hint = (1, 1)
         self.size = Window.size
 
@@ -65,7 +67,7 @@ class testScreenLive(FloatLayout):
         #add_debug_outline(mainContent, color=(1, 0, 1, 1))    # Blue
         mainContent.add_widget(LoadingBar(total_time=50))
         
-        buttonContainer = BoxLayout(
+        buttonContainer = MDBoxLayout(
             orientation = "horizontal",
             size_hint = (1, 1),
             height = dp(60),
