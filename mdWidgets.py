@@ -773,28 +773,68 @@ class OverlayCloseButton(ButtonBehavior, RelativeLayout):
         kwargs.setdefault("size", (dp(64), dp(64)))
         super().__init__(**kwargs)
 
+        self.ripple_alpha = 0
+        self.ripple_pos = (0, 0)
+        self.ripple_radius = 0
+
         with self.canvas.before:
             Color(0.86, 0.24, 0.24, 1)
             self.circle = Ellipse(pos=self.pos, size=self.size)
 
-        self.x_label = Label(
-            text="✕",
-            font_size="26sp",
-            color=(1, 1, 1, 1),
-            bold=True,
-            halign="center",
-            valign="middle",
-            size_hint=(1, 1),
-            text_size=(0, 0),
+        with self.canvas:
+            StencilPush()
+            self.stencil_shape = Ellipse(pos=(0, 0), size=self.size)
+            StencilUse()
+
+            self.ripple_color_instruction = Color(1, 1, 1, self.ripple_alpha)
+            self.ripple = Ellipse(size=(0, 0))
+
+            StencilPop()
+
+        self.x_image = Image(
+            source="assets/x.png",
+            allow_stretch=True,
+            keep_ratio=True,
+            size_hint=(0.8, 0.8),
+            pos_hint={"center_x": 0.5, "center_y": 0.5},
         )
-        self.add_widget(self.x_label)
+        self.add_widget(self.x_image)
 
         self.bind(pos=self._update_graphics, size=self._update_graphics)
 
     def _update_graphics(self, *args):
-        self.circle.pos = self.pos
+        self.circle.pos = (0, 0)
         self.circle.size = self.size
-        self.x_label.text_size = self.size
+        self.stencil_shape.pos = (0, 0)
+        self.stencil_shape.size = self.size
+
+        self.ripple_color_instruction.rgba = (1, 1, 1, self.ripple_alpha)
+        r = self.ripple_radius
+        self.ripple.size = (r * 2, r * 2)
+        self.ripple.pos = (self.ripple_pos[0] - r, self.ripple_pos[1] - r)
+
+    def reset_ripple(self, *args):
+        self.ripple_radius = 0
+        self.ripple_alpha = 0
+        self._update_graphics()
+
+    def on_touch_down(self, touch):
+        if not self.collide_point(*touch.pos):
+            return super().on_touch_down(touch)
+
+        self.ripple_pos = (touch.x - self.x, touch.y - self.y)
+        self.ripple_radius = 0
+        self.ripple_alpha = 0.35
+
+        max_r = max(self.width, self.height) * 1.2
+        expand = Animation(ripple_radius=max_r, d=0.23, t="out_quad")
+        fade = Animation(ripple_alpha=0, d=0.18, t="out_quad")
+        anim = expand + fade
+        anim.bind(on_progress=lambda *a: self._update_graphics())
+        anim.bind(on_complete=self.reset_ripple)
+        anim.start(self)
+
+        return super().on_touch_down(touch)
 
 
 class MultiStepInstructionOverlay(RelativeLayout):
@@ -815,6 +855,7 @@ class MultiStepInstructionOverlay(RelativeLayout):
         self.current_index = 0
         self.on_close = on_close
         self._resize_event = None
+        self._is_animating = False
 
         with self.canvas.before:
             self.backdrop_color = Color(0, 0, 0, 0.0)
@@ -860,6 +901,10 @@ class MultiStepInstructionOverlay(RelativeLayout):
         self.content_holder.add_widget(self.left_container)
         self.left_container.bind(size=self._schedule_resize)
 
+        self.left_content_anchor = AnchorLayout(anchor_x="left", anchor_y="top", size_hint=(1, 1))
+        self.left_content_box = BoxLayout(orientation="vertical", size_hint=(1, None), spacing=dp(10))
+        self.left_content_box.bind(minimum_height=self.left_content_box.setter("height"))
+
         self.title_label = Label(
             text="",
             font_size="22sp",
@@ -883,8 +928,10 @@ class MultiStepInstructionOverlay(RelativeLayout):
         self._bind_label_wrapping(self.title_label)
         self._bind_label_wrapping(self.body_label)
 
-        self.left_container.add_widget(self.title_label)
-        self.left_container.add_widget(self.body_label)
+        self.left_content_box.add_widget(self.title_label)
+        self.left_content_box.add_widget(self.body_label)
+        self.left_content_anchor.add_widget(self.left_content_box)
+        self.left_container.add_widget(self.left_content_anchor)
 
         self.right_container = uni_centerBox(size_hint=(None, None))
         self.right_container.content.padding = [dp(10), dp(10), dp(10), dp(10)]
@@ -921,6 +968,8 @@ class MultiStepInstructionOverlay(RelativeLayout):
         Clock.schedule_once(lambda dt: self._animate_in(), 0)
 
         self._update_slide_content()
+        self._touch_start = None
+        self._touch_pos = None
 
     def _bind_label_wrapping(self, label):
         def update_text_size(*args):
@@ -947,18 +996,16 @@ class MultiStepInstructionOverlay(RelativeLayout):
         self._update_slide_content()
 
     def next_slide(self, *args):
-        if not self.instructions:
+        if not self.instructions or self._is_animating:
             return
         if self.current_index < len(self.instructions) - 1:
-            self.current_index += 1
-            self._update_slide_content()
+            self._animate_slide_change(self.current_index + 1)
 
     def previous_slide(self, *args):
-        if not self.instructions:
+        if not self.instructions or self._is_animating:
             return
         if self.current_index > 0:
-            self.current_index -= 1
-            self._update_slide_content()
+            self._animate_slide_change(self.current_index - 1)
 
     def _update_slide_content(self):
         if not self.instructions:
@@ -989,6 +1036,24 @@ class MultiStepInstructionOverlay(RelativeLayout):
         self.left_nav.disabled = self.current_index == 0
         self.right_nav.disabled = self.current_index >= len(self.instructions) - 1
 
+    def _animate_slide_change(self, target_index):
+        if target_index == self.current_index:
+            return
+        self._is_animating = True
+
+        def _apply_update(*_):
+            self.current_index = target_index
+            self._update_slide_content()
+            fade_in = Animation(opacity=1, d=0.1, t="out_quad")
+            fade_in.start(self.left_content_box)
+            fade_in.start(self.right_display)
+            fade_in.bind(on_complete=lambda *_: setattr(self, "_is_animating", False))
+
+        fade_out = Animation(opacity=0, d=0.08, t="out_quad")
+        fade_out.bind(on_complete=_apply_update)
+        fade_out.start(self.left_content_box)
+        fade_out.start(self.right_display)
+
     def close_overlay(self, *args):
         self._animate_out()
 
@@ -1002,8 +1067,29 @@ class MultiStepInstructionOverlay(RelativeLayout):
             return True
 
         # Let children (nav/buttons) handle it, but stop propagation to layers beneath.
+        if self.row.collide_point(*touch.pos):
+            self._touch_start = touch.pos
+            self._touch_pos = touch.pos
         super().on_touch_down(touch)
         return True
+
+    def on_touch_move(self, touch):
+        if self._touch_start:
+            self._touch_pos = touch.pos
+        return super().on_touch_move(touch)
+
+    def on_touch_up(self, touch):
+        if self._touch_start and self._touch_pos:
+            dx = self._touch_pos[0] - self._touch_start[0]
+            dy = self._touch_pos[1] - self._touch_start[1]
+            if abs(dx) > dp(60) and abs(dx) > abs(dy):
+                if dx < 0:
+                    self.next_slide()
+                else:
+                    self.previous_slide()
+        self._touch_start = None
+        self._touch_pos = None
+        return super().on_touch_up(touch)
 
     # --- Layout helpers ---
     def _schedule_resize(self, *args):
