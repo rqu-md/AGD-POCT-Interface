@@ -208,17 +208,47 @@ class pretest(MDScreen):
         return [
             InstructionPanel(
                 title="Introduction",
-                body="Have the sample collection kit and POCT device ready.\n1. Swab\n2. Tube A\n3. Tube B\n4. Tube C\n5. POCT Device",
-                image=None,
+                body="Have the sample collection kit and POCT device ready.[size=6]\n\n[/size]1. Swab\n2. Tube A\n3. Tube B\n4. Tube C\n5. POCT Device",
+                image="assets/instructionImage-Init.png",
             ),
             InstructionPanel(
                 title="Step 1. Preparation",
-                body="Make sure to rinse your mouth with water before proceeding.\n\nRemove the Swab from its package. ",
-                image=None,
+                body="Make sure to rinse your mouth with water before proceeding.[size=6]\n\n[/size]Remove the Swab from its package. ",
+                image="assets/instructionImage-Step1.png",
             ),
             InstructionPanel(
                 title="Step 2. Mouth Swab",
                 body="Insert the Swab into your mouth, and firmly brush the Swab on top of your tongue up and down for 30 seconds.",
-                image=None,
+                image="assets/instructionImage-Step2.png",
+            ),
+            InstructionPanel(
+                title="Step 3. Mix in Tube A",
+                body="Twist open the purple cap on Tube A. Set the purple cap aside.[size=6]\n\n[/size]Put the Swab into Tube A and gently stir it at the bottom of the tube for 30 seconds. [size=6]\n\n[/size]Discard the Swab when completed and twist the purple cap back on Tube A.",
+                image="assets/instructionImage-Step3.png",
+            ),
+            InstructionPanel(
+                title="Step 4. Load in Tube B",
+                body="Twist open the small white cap of Tube A.[size=6]\n\n[/size]Invert Tube A and add 2 drops of sample into Tube B. ",
+                image="assets/instructionImage-Step4.png",
+            ),
+            InstructionPanel(
+                title="Step 5. Tube B & C Assembly",
+                body="Connect Tube C on top of Tube B. Make sure it is fully seated and sealed.",
+                image="assets/instructionImage-Step5.png",
+            ),
+            InstructionPanel(
+                title="Step 6. Tab Removal",
+                body="Remove the small gray tab from Tube C.[size=6]\n\n[/size][b]DO NOT PUSH OR PULL ON THE PLUNGER ON TOP OF TUBE C.[/b]",
+                image="assets/instructionImage-Step6.png",
+            ),
+            InstructionPanel(
+                title="Step 7. Tube To Device",
+                body="Open the lid of the device.[size=6]\n\n[/size]Put the assembly of [b]Tube B & C[/b] into the Device, and make sure it sits all the way down into the hole. ",
+                image="assets/instructionImage-Step7.png",
+            ),
+            InstructionPanel(
+                title="Step 8. Ready To Test",
+                body="Close the lid of the device, and make sure it is locked properly.[size=6]\n\n[/size]You can now start your test.",
+                image="assets/instructionImage-Step8.png",
             ),
         ]

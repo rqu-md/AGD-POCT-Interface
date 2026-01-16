@@ -878,6 +878,7 @@ class MultiStepInstructionOverlay(RelativeLayout):
             valign="top",
             size_hint_y=None,
             text_size=(0, 0),
+            markup=True,
         )
         self._bind_label_wrapping(self.title_label)
         self._bind_label_wrapping(self.body_label)
