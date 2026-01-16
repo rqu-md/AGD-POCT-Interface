@@ -1,9 +1,9 @@
 
-##Using mdWidgets.py##
+# Using mdWidgets.py
 
 All the components can be found in mdWidgets.py. They can be organized between **universal widgets** that are used repeatedly and necessary on all pages, and **unique components** which are often unique to one specific page.
 
-##Universal Widgets##
+## Universal Widgets
 
 Universal widgets are any components that are used frequently on multiple different pages. The main structure of all the pages are dependent on majority of the components in this category.
 
@@ -15,23 +15,23 @@ uni_lowerContainer - Lower footer
 uni_backButton - Back button
 uni_homeButton - Home button
 
-##uni_upperContainer##
+## uni_upperContainer
 
 This is a header container for the top of the page. It includes a center title location and two smaller containers to the right and left for other widgets.
 
-##uni_centerBox
+## uni_centerBox
 
 This is the main container. Any contents (text, text fields, loading bars, lists, etc) should be in this container.
 
-##uni_lowerContainer
+## uni_lowerContainer
 
 This is the footer container. It stays at the bottom of the page, and has a clock in the center by default. The `left_box` container is for the nav buttons (back and home), but they may not always be present (ex: test screen)
 
-##uni_backButton##
+## uni_backButton
 
 This is the universal back button for pages. It is intended to be in `left_box` in `uni_lowerContainer`.
 
-##uni_homeButton##
+## uni_homeButton
 
 This is the universal home button for pages. It is intended to be in `left_box` in `uni_lowerContainer`.
 
@@ -50,8 +50,16 @@ bottom.width = Window.width
 self.add_widget(bottom)
 ```
 
+## Unique Widgets
 
-Classes
+The following are unique widgets that may only be used once or on a few pages. 
+
+
+# Instruction Overlay
+
+The Instruction Overlay is composed of multiple different classes working together. All of these are essential to make sure the widget works properly.
+
+### Classes
 
 `InstructionPanel`
 
@@ -99,7 +107,8 @@ Fullscreen overlay that renders the instruction flow.
     * `next_slide()`, `previous_slide()`: manual navigation.
     * `close_overlay()`: dismiss programmatically.
 
-Usage Example
+### Usage Example
+
 ```
 from mdWidgets import InstructionPanel, MultiStepInstructionOverlay
 
@@ -123,9 +132,7 @@ overlay = MultiStepInstructionOverlay(
 
 root_widget.add_widget(overlay)
 ```
-
-
-Notes
+### Notes
 * Assets: Ensure `assets/LNav.png`, `assets/RNav.png`, and `assets/x.png` exist.
 * Swipe: Horizontal swipe over the content area switches slides.
 * Dismiss: Tap outside the panels or use the X button.
