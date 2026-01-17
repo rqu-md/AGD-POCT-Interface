@@ -625,6 +625,172 @@ class uni_centerBox(RelativeLayout):
         return super().add_widget(widget, *args, **kwargs)
 
 
+class FolderTabButton(ButtonBehavior, BoxLayout):
+    text = StringProperty("")
+    selected = BooleanProperty(False)
+    disabled = BooleanProperty(False)
+
+    def __init__(self, text="", **kwargs):
+        kwargs.setdefault("size_hint", (1, 1))
+        super().__init__(**kwargs)
+        self.text = text
+        self.padding = [dp(10), dp(6), dp(10), dp(6)]
+
+        with self.canvas.before:
+            self.bg_color_instruction = Color(1, 1, 1, 0)
+            self.bg_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(16)] * 4)
+
+        self.label = Label(
+            text=self.text,
+            color=(0.5, 0.5, 0.5, 1),
+            bold=True,
+            halign="center",
+            valign="middle",
+        )
+        self.label.bind(size=self._update_label_text_size)
+        self.add_widget(self.label)
+
+        self.bind(pos=self._update_bg, size=self._update_bg)
+        self.bind(selected=self._refresh_style, disabled=self._refresh_style)
+        self._refresh_style()
+
+    def _update_label_text_size(self, instance, size):
+        instance.text_size = size
+
+    def _update_bg(self, *args):
+        self.bg_rect.pos = self.pos
+        self.bg_rect.size = self.size
+
+    def _refresh_style(self, *args):
+        if self.disabled:
+            self.bg_color_instruction.rgba = (1, 1, 1, 0)
+            self.label.color = (0.65, 0.65, 0.65, 1)
+        elif self.selected:
+            self.bg_color_instruction.rgba = (1, 1, 1, 1)
+            self.label.color = (0.2, 0.3, 0.7, 1)
+        else:
+            self.bg_color_instruction.rgba = (1, 1, 1, 0)
+            self.label.color = (0.5, 0.5, 0.5, 1)
+
+    def on_touch_down(self, touch):
+        if self.disabled:
+            return False
+        return super().on_touch_down(touch)
+
+
+class uni_folderContainer(uni_centerBox):
+    """
+    Folder-style container with a header row of tabs and a main content region.
+    """
+
+    def __init__(self, tabs=None, **kwargs):
+        super().__init__(**kwargs)
+
+        self.content.padding = [0, 0, 0, 0]
+        self.content.spacing = 0
+
+        self.header = BoxLayout(
+            orientation="horizontal",
+            size_hint=(1, None),
+            height=dp(56),
+            padding=[dp(16), dp(8), dp(16), dp(8)],
+            spacing=dp(8),
+        )
+        with self.header.canvas.before:
+            Color(0.95, 0.95, 1, 1)
+            self.header_bg = RoundedRectangle(pos=self.header.pos, size=self.header.size, radius=[(dp(18), dp(18)), (dp(18), dp(18)), (0, 0), (0, 0)])
+        self.header.bind(pos=self._update_header_bg, size=self._update_header_bg)
+
+        self.tabs_row = BoxLayout(orientation="horizontal", size_hint=(1, 1), spacing=dp(8))
+        self.header.add_widget(self.tabs_row)
+
+        self.content_area = BoxLayout(
+            orientation="vertical",
+            size_hint=(1, 1),
+            padding=[dp(24), dp(20), dp(24), dp(20)],
+            spacing=dp(10),
+        )
+
+        super().add_widget(self.header)
+        super().add_widget(self.content_area)
+
+        self.tab_buttons = []
+        self.tab_contents = []
+        self.tab_enabled = []
+        self.current_index = 0
+
+        if tabs is None:
+            tabs = [
+                ("Test Results", None),
+                ("Result Details", None),
+                ("Export", None),
+            ]
+        self.set_tabs(tabs)
+
+    def _update_header_bg(self, *args):
+        self.header_bg.pos = self.header.pos
+        self.header_bg.size = self.header.size
+
+    def _build_placeholder(self, title):
+        placeholder = BoxLayout()
+        placeholder.add_widget(Label(text=title, color=(0.5, 0.5, 0.5, 0.6)))
+        return placeholder
+
+    def set_tabs(self, tabs):
+        self.tabs_row.clear_widgets()
+        self.tab_buttons = []
+        self.tab_contents = []
+        self.tab_enabled = []
+
+        normalized_tabs = list(tabs or [])
+        while len(normalized_tabs) < 3:
+            normalized_tabs.append(("", None, False))
+
+        for idx, tab in enumerate(normalized_tabs):
+            title = ""
+            content = None
+            enabled = True
+
+            if isinstance(tab, (list, tuple)):
+                if len(tab) >= 1:
+                    title = tab[0] or ""
+                if len(tab) >= 2:
+                    content = tab[1]
+                if len(tab) >= 3:
+                    enabled = bool(tab[2])
+            else:
+                title = str(tab)
+
+            if content is None:
+                content = self._build_placeholder(title or " ")
+
+            button = FolderTabButton(text=title)
+            button.disabled = not enabled
+            button.bind(on_release=lambda *_args, i=idx: self.select_tab(i))
+
+            self.tabs_row.add_widget(button)
+            self.tab_buttons.append(button)
+            self.tab_contents.append(content)
+            self.tab_enabled.append(enabled)
+
+        self.select_tab(0)
+
+    def select_tab(self, index):
+        if index < 0 or index >= len(self.tab_contents):
+            return
+        if not self.tab_enabled[index]:
+            return
+
+        self.current_index = index
+        for i, button in enumerate(self.tab_buttons):
+            button.selected = i == index
+
+        self.content_area.clear_widgets()
+        content = self.tab_contents[index]
+        if content.parent:
+            content.parent.remove_widget(content)
+        self.content_area.add_widget(content)
+
 def add_debug_outline(widget, color=(1, 0, 0, 1), line_width=1.5):
     """
     Adds a colored outline to a Kivy widget for debugging layout issues using the Line instruction.
