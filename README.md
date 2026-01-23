@@ -14,6 +14,7 @@ uni_centerBox - Main container
 uni_lowerContainer - Lower footer
 uni_backButton - Back button
 uni_homeButton - Home button
+uni_folderContainer - Tabbed main container
 
 ### uni_upperContainer
 
@@ -35,6 +36,15 @@ This is the universal back button for pages. It is intended to be in `left_box` 
 
 This is the universal home button for pages. It is intended to be in `left_box` in `uni_lowerContainer`.
 
+### uni_folderContainer
+
+Tabbed container with a header and swipe navigation.
+* Purpose: Provides the three-tab layout used on report screens.
+* Key behavior
+    * Tabs are clickable and include a sliding white highlight.
+    * Horizontal swipe switches tabs left/right.
+    * `set_tabs([...])` accepts a list of `(title, content, enabled?)` items.
+
 ### Example Usage (Nav buttons in the footer)
 
 ```
@@ -53,6 +63,37 @@ self.add_widget(bottom)
 # Unique Widgets
 
 The following are unique widgets that may only be used once or on a few pages. 
+
+## User Report Builders
+
+These functions return ready-to-use widget trees for `userReport.py`.
+
+`build_simple_tab(title)`
+* Purpose: Simple placeholder tab with centered label.
+* Args
+    * `title` (str): text to display.
+
+`build_result_summary(result)`
+* Purpose: Builds the "This Result:" title and icon/result row.
+* Args
+    * `result` (str): one of `"high tolerance"`, `"LOW tolerance"`, `"extremely low tolerance"`, `"NON-VALID RESULTS"`.
+
+`build_test_results_tab(project, time_str, result)`
+* Purpose: Full Test Results tab with project/date header and centered result summary.
+* Args
+    * `project` (str): project name.
+    * `time_str` (str): date/time text.
+    * `result` (str): result category string.
+
+`build_result_details_tab(result)`
+* Purpose: Scrollable Result Details tab with result summary + details text mapped by result.
+* Args
+    * `result` (str): result category string.
+
+`build_export_tab(qr_image_path="assets/sampleQR.png")`
+* Purpose: Export tab with dropdown (QR Code/USB) and corresponding content.
+* Args
+    * `qr_image_path` (str): PNG path to display for QR Code export.
 
 
 ## Instruction Overlay

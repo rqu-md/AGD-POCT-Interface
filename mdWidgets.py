@@ -24,11 +24,15 @@ from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.uix.relativelayout import RelativeLayout
 from kivy.uix.widget import Widget
+from kivy.uix.scrollview import ScrollView
 
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDButton, MDButtonIcon, MDButtonText
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.label import MDLabel
+from kivymd.uix.list import MDListItemLeadingIcon
+from kivymd.uix.dropdownitem import MDDropDownItem, MDDropDownItemText
+from kivymd.uix.menu import MDDropdownMenu
 
 
 # ---------------------------------------------------------------------------
@@ -699,10 +703,13 @@ class uni_folderContainer(uni_centerBox):
         with self.header.canvas.before:
             Color(0.95, 0.95, 1, 1)
             self.header_bg = RoundedRectangle(pos=self.header.pos, size=self.header.size, radius=[(dp(18), dp(18)), (dp(18), dp(18)), (0, 0), (0, 0)])
+            self.tab_highlight_color = Color(1, 1, 1, 1)
+            self.tab_highlight = RoundedRectangle(pos=self.header.pos, size=(0, 0), radius=[dp(16)] * 4)
         self.header.bind(pos=self._update_header_bg, size=self._update_header_bg)
 
         self.tabs_row = BoxLayout(orientation="horizontal", size_hint=(1, 1), spacing=dp(8))
         self.header.add_widget(self.tabs_row)
+        self.tabs_row.bind(size=self._update_highlight_position, pos=self._update_highlight_position)
 
         self.content_area = BoxLayout(
             orientation="vertical",
@@ -718,6 +725,8 @@ class uni_folderContainer(uni_centerBox):
         self.tab_contents = []
         self.tab_enabled = []
         self.current_index = 0
+        self._swipe_start = None
+        self._swipe_pos = None
 
         if tabs is None:
             tabs = [
@@ -730,6 +739,7 @@ class uni_folderContainer(uni_centerBox):
     def _update_header_bg(self, *args):
         self.header_bg.pos = self.header.pos
         self.header_bg.size = self.header.size
+        self._update_highlight_position()
 
     def _build_placeholder(self, title):
         placeholder = BoxLayout()
@@ -767,20 +777,23 @@ class uni_folderContainer(uni_centerBox):
             button = FolderTabButton(text=title)
             button.disabled = not enabled
             button.bind(on_release=lambda *_args, i=idx: self.select_tab(i))
+            button.bind(size=self._update_highlight_position, pos=self._update_highlight_position)
 
             self.tabs_row.add_widget(button)
             self.tab_buttons.append(button)
             self.tab_contents.append(content)
             self.tab_enabled.append(enabled)
 
-        self.select_tab(0)
+        # Defer initial highlight placement until layout has sizes.
+        Clock.schedule_once(lambda dt: self.select_tab(0, animate=False), 0)
+        Clock.schedule_once(lambda dt: self._move_highlight(self.current_index, animate=False), 0)
 
-    def select_tab(self, index):
+    def select_tab(self, index, animate=True):
         if index < 0 or index >= len(self.tab_contents):
             return
         if not self.tab_enabled[index]:
             return
-
+        prev_index = self.current_index
         self.current_index = index
         for i, button in enumerate(self.tab_buttons):
             button.selected = i == index
@@ -790,6 +803,71 @@ class uni_folderContainer(uni_centerBox):
         if content.parent:
             content.parent.remove_widget(content)
         self.content_area.add_widget(content)
+        if animate and self.tab_highlight.size == (0, 0):
+            if 0 <= prev_index < len(self.tab_buttons):
+                prev_button = self.tab_buttons[prev_index]
+                if prev_button.width > 0 and prev_button.height > 0:
+                    self.tab_highlight.pos = prev_button.pos
+                    self.tab_highlight.size = prev_button.size
+                else:
+                    animate = False
+            else:
+                animate = False
+        self._move_highlight(index, animate=animate)
+
+    def _update_highlight_position(self, *args):
+        if not self.tab_buttons:
+            return
+        if self.current_index < 0 or self.current_index >= len(self.tab_buttons):
+            return
+        button = self.tab_buttons[self.current_index]
+        if button.width <= 0 or button.height <= 0:
+            return
+        self.tab_highlight.pos = button.pos
+        self.tab_highlight.size = button.size
+
+    def _move_highlight(self, index, animate=True):
+        if index < 0 or index >= len(self.tab_buttons):
+            return
+        button = self.tab_buttons[index]
+        if button.width <= 0 or button.height <= 0:
+            return
+        if animate:
+            Animation.cancel_all(self.tab_highlight, "pos", "size")
+            Animation(
+                pos=button.pos,
+                size=button.size,
+                d=0.18,
+                t="out_quad",
+            ).start(self.tab_highlight)
+        else:
+            self.tab_highlight.pos = button.pos
+            self.tab_highlight.size = button.size
+
+    def on_touch_down(self, touch):
+        if not self.collide_point(*touch.pos):
+            return super().on_touch_down(touch)
+        self._swipe_start = touch.pos
+        self._swipe_pos = touch.pos
+        return super().on_touch_down(touch)
+
+    def on_touch_move(self, touch):
+        if self._swipe_start:
+            self._swipe_pos = touch.pos
+        return super().on_touch_move(touch)
+
+    def on_touch_up(self, touch):
+        if self._swipe_start and self._swipe_pos:
+            dx = self._swipe_pos[0] - self._swipe_start[0]
+            dy = self._swipe_pos[1] - self._swipe_start[1]
+            if abs(dx) > dp(60) and abs(dx) > abs(dy):
+                if dx < 0:
+                    self.select_tab(self.current_index + 1)
+                else:
+                    self.select_tab(self.current_index - 1)
+        self._swipe_start = None
+        self._swipe_pos = None
+        return super().on_touch_up(touch)
 
 def add_debug_outline(widget, color=(1, 0, 0, 1), line_width=1.5):
     """
@@ -818,6 +896,281 @@ def add_debug_outline(widget, color=(1, 0, 0, 1), line_width=1.5):
         )
 
     widget.bind(pos=update_debug_line, size=update_debug_line)
+
+
+def build_simple_tab(title):
+    box = MDBoxLayout(orientation="vertical")
+    label = MDLabel(
+        text=title,
+        halign="center",
+        valign="middle",
+        theme_text_color="Secondary",
+    )
+    label.bind(size=lambda instance, size: setattr(instance, "text_size", size))
+    box.add_widget(label)
+    return box
+
+
+def build_result_summary(result):
+    icon_map = {
+        "high tolerance": "liquor",
+        "LOW tolerance": "glass-wine",
+        "extremely low tolerance": "glass-cocktail-off",
+        "NON-VALID RESULTS": "alert-remove",
+    }
+    normalized = " ".join(result.strip().lower().split())
+    icon_map_normalized = {k.lower(): v for k, v in icon_map.items()}
+    icon_name = icon_map.get(result, icon_map_normalized.get(normalized, "help-circle"))
+
+    styles = {
+        "high tolerance": ((0.2, 0.6, 0.3, 1), "High Tolerance"),
+        "low tolerance": ((0.82, 0.55, 0.2, 1), "Low Tolerance"),
+        "extremely low tolerance": ((0.85, 0.2, 0.2, 1), "Extremely Low Tolerance"),
+        "non-valid results": ((0.45, 0.45, 0.45, 1), "Non-Valid Results"),
+    }
+    result_color, result_text = styles.get(normalized, ((0.2, 0.3, 0.7, 1), result))
+
+    center_block = MDBoxLayout(
+        orientation="vertical",
+        spacing=dp(4),
+        size_hint=(None, None),
+        padding=dp(0),
+    )
+    center_block.bind(minimum_height=center_block.setter("height"))
+    center_block.bind(minimum_width=center_block.setter("width"))
+    result_title = MDLabel(
+        text="This Result:",
+        halign="center",
+        valign="middle",
+        theme_text_color="Custom",
+        text_color=(0.2, 0.3, 0.7, 1),
+        bold=True,
+        padding=dp(0),
+        size_hint=(None, None),
+        text_size=(None, None),
+        adaptive_size=True,
+        shorten=True,
+        shorten_from="right",
+    )
+    result_title.font_size = "24sp"
+    result_title.bind(texture_size=lambda instance, size: setattr(instance, "size", size))
+    center_block.add_widget(result_title)
+
+    result_row = MDBoxLayout(orientation="horizontal", spacing=dp(8), adaptive_size=True)
+    result_row.bind(minimum_width=result_row.setter("width"))
+    result_row.bind(minimum_height=result_row.setter("height"))
+    icon = MDListItemLeadingIcon(icon=icon_name)
+    icon.theme_text_color = "Custom"
+    icon.text_color = result_color
+    icon.size_hint = (None, None)
+    icon.font_size = "40sp"
+    icon.size = (dp(36), dp(36))
+
+    result_label = MDLabel(
+        text=result_text,
+        halign="left",
+        valign="bottom",
+        theme_text_color="Custom",
+        text_color=result_color,
+        font_style="Title",
+        size_hint=(None, None),
+        text_size=(None, None),
+        adaptive_size=True,
+        shorten=True,
+        shorten_from="right",
+    )
+    result_label.font_size = "36sp"
+    result_label.bind(texture_size=lambda instance, size: setattr(instance, "size", size))
+
+    result_row.add_widget(icon)
+    result_row.add_widget(result_label)
+    result_anchor = AnchorLayout(anchor_x="center", anchor_y="center", size_hint=(1, None))
+    result_row.bind(height=lambda instance, value: setattr(result_anchor, "height", value))
+    result_anchor.height = result_row.height
+    result_anchor.add_widget(result_row)
+    center_block.add_widget(result_anchor)
+    return center_block
+
+
+def build_test_results_tab(project, time_str, result):
+    root = MDBoxLayout(orientation="vertical", spacing=dp(16))
+    header_row = MDBoxLayout(orientation="horizontal", size_hint=(1, None), height=dp(32))
+    project_label = MDLabel(
+        text=project,
+        halign="left",
+        valign="middle",
+        theme_text_color="Primary",
+    )
+    date_label = MDLabel(
+        text=time_str,
+        halign="right",
+        valign="middle",
+        theme_text_color="Primary",
+    )
+    header_row.add_widget(project_label)
+    header_row.add_widget(date_label)
+    root.add_widget(header_row)
+
+    result_center = AnchorLayout(anchor_x="center", anchor_y="top", size_hint=(1, 1))
+    result_center.add_widget(build_result_summary(result))
+    root.add_widget(result_center)
+    return root
+
+
+def build_result_details_tab(result):
+    details_map = {
+        "high tolerance": (
+            "Your ALDH2 gene is functioning normally, which means your body can properly break down alcohol efficiently. You are less likely to experience flushing or discomfort after drinking. \n\n[b]Warning:[/b] Alcohol can still harm your liver, brain, and overall health with excessive use. \n\n[b]Tip:[/b] Enjoy responsibly! The CDC recommends limiting to 1 drink per day for women and 2 for men. Staying hydrated and giving your body rest days from alcohol is key to long-term health. "
+        ),
+        "low tolerance": (
+            "Your ALDH2 gene carries a variant that reduces your body's ability to break down alcohol efficiently. This can make you flush or feel unwell after even small amounts of alcohol. You may experience facial flushing, nausea, or rapid heartbeat after drinking. \n\n[b]Warning:[/b] Regular alcohol consumption can increase your risk of health issues over time, including liver damage, esophageal cancer, and heart issues. \n\n[b]Tip:[/b] It's strongly advised to limit alcohol consumption. If you choose to drink, keep it to small, occasional amounts. Take it slow, eat beforehand, and stay hydrated to help your body process it more safely."
+        ),
+        "extremely low tolerance": (
+            "Your ALDH2 gene has two inactive copies, meaning your body has a severely impaired ability to process alcohol. Even small amounts of alcohol can lead to a dangerous buildup of acetaldehyde, a toxic and carcinogenic substance that your body can't easily remove. \n\n[b]Warning:[/b] Drinking may cause strong flushing, dizziness, nausea, or heart palpitations — and long-term use can significantly increase your risk of cancer, liver damage, and cardiovascular diseases. \n\n[b]Tip:[/b] The safest choice is to avoid alcohol entirely. If possible, choose non-alcoholic beverages and celebrate with alternatives that protect your long-term health. Your body will thank you for it!"
+        ),
+        "non-valid results": (
+            "This result could not be interpreted. Please re-run the test or consult support if the issue persists."
+        ),
+    }
+    normalized = " ".join(result.strip().lower().split())
+    details_text = details_map.get(normalized, "No details available for this result.")
+
+    root = MDBoxLayout(orientation="vertical", spacing=dp(12))
+
+    scroll = ScrollView(
+        size_hint=(1, 1),
+        do_scroll_x=False,
+        do_scroll_y=True,
+        scroll_type=["bars", "content"],
+        bar_width=dp(6),
+        bar_color=(0.2, 0.3, 0.7, 0.7),
+        bar_inactive_color=(0.2, 0.3, 0.7, 0.35),
+    )
+    scroll.scroll_y = 1
+
+    scroll_content = MDBoxLayout(
+        orientation="vertical",
+        size_hint_y=None,
+        padding=[0, dp(4), dp(8), dp(8)],
+        spacing=dp(16),
+    )
+    scroll_content.bind(minimum_height=scroll_content.setter("height"))
+
+    result_summary = build_result_summary(result)
+    result_wrapper = AnchorLayout(anchor_x="center", anchor_y="top", size_hint=(1, None))
+    result_wrapper.height = result_summary.height
+    result_summary.bind(height=lambda instance, value: setattr(result_wrapper, "height", value))
+    result_wrapper.add_widget(result_summary)
+    scroll_content.add_widget(result_wrapper)
+
+    details_label = MDLabel(
+        text=details_text,
+        halign="left",
+        valign="top",
+        theme_text_color="Primary",
+        size_hint_y=None,
+        markup=True,
+    )
+    details_label.bind(
+        width=lambda instance, value: setattr(instance, "text_size", (value, None))
+    )
+    details_label.bind(
+        texture_size=lambda instance, size: setattr(instance, "height", size[1])
+    )
+
+    scroll_content.add_widget(details_label)
+    scroll.add_widget(scroll_content)
+    root.add_widget(scroll)
+    return root
+
+
+def build_export_tab(qr_image_path="assets/sampleQR.png"):
+    root = MDBoxLayout(orientation="vertical", spacing=dp(16))
+
+    header_row = MDBoxLayout(orientation="horizontal", size_hint=(1, None), height=dp(40))
+    left_group = MDBoxLayout(orientation="horizontal", size_hint=(None, 1), spacing=dp(12))
+    left_group.bind(minimum_width=left_group.setter("width"))
+    header_label = MDLabel(
+        text="Export Method:",
+        halign="left",
+        valign="middle",
+        size_hint=(None, 1),
+        adaptive_size=True,
+        shorten=True,
+        shorten_from="right",
+    )
+    header_label.bind(texture_size=lambda instance, size: setattr(instance, "width", size[0]))
+
+    dropdown = MDDropDownItem(size_hint=(None, None))
+    dropdown_text = MDDropDownItemText(text="QR Code")
+    dropdown.add_widget(dropdown_text)
+    dropdown.width = dp(160)
+    left_group.add_widget(header_label)
+    left_group.add_widget(dropdown)
+    header_row.add_widget(left_group)
+    header_row.add_widget(Widget())
+    root.add_widget(header_row)
+
+    content_holder = MDBoxLayout(orientation="vertical", size_hint=(1, 1))
+    root.add_widget(content_holder)
+
+    qr_container = MDBoxLayout(orientation="vertical", spacing=dp(16))
+    qr_container.add_widget(AnchorLayout(size_hint=(1, None), height=dp(200)))
+    qr_image = Image(
+        source=qr_image_path,
+        allow_stretch=True,
+        keep_ratio=True,
+        size_hint=(None, None),
+        size=(dp(180), dp(180)),
+    )
+    qr_container.children[0].add_widget(qr_image)
+
+    qr_instructions = MDLabel(
+        text="Scan with your mobile device.\nYou will be redirected to a portal where your results will be available for download.",
+        halign="center",
+        valign="top",
+    )
+    qr_instructions.bind(size=lambda instance, size: setattr(instance, "text_size", size))
+    qr_container.add_widget(qr_instructions)
+
+    usb_container = MDBoxLayout(orientation="vertical", spacing=dp(16))
+    usb_note = MDLabel(
+        text="Make sure your device is properly connected.",
+        halign="center",
+        valign="middle",
+    )
+    usb_note.bind(size=lambda instance, size: setattr(instance, "text_size", size))
+    usb_button = MDButton(MDButtonIcon(icon="usb"), style="elevated", size_hint=(None, None))
+    usb_label = MDButtonText(text="Export To USB")
+    usb_button.add_widget(usb_label)
+
+    def _resize_usb_button(*_):
+        usb_button.width = usb_label.texture_size[0] + dp(60)
+        usb_button.height = max(usb_label.texture_size[1] + dp(20), dp(48))
+
+    usb_label.bind(texture_size=_resize_usb_button)
+    _resize_usb_button()
+    usb_container.add_widget(AnchorLayout(size_hint=(1, None), height=dp(56)))
+    usb_container.children[0].add_widget(usb_button)
+    usb_container.add_widget(usb_note)
+
+    def set_export_view(value):
+        dropdown_text.text = value
+        content_holder.clear_widgets()
+        if value == "USB":
+            content_holder.add_widget(usb_container)
+        else:
+            content_holder.add_widget(qr_container)
+
+    menu_items = [
+        {"text": "QR Code", "on_release": lambda *_: set_export_view("QR Code")},
+        {"text": "USB", "on_release": lambda *_: set_export_view("USB")},
+    ]
+    menu = MDDropdownMenu(caller=dropdown, items=menu_items, width_mult=3)
+    dropdown.on_release = menu.open
+
+    set_export_view("QR Code")
+    return root
 
 
 @dataclass
