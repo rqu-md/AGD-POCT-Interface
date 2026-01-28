@@ -1,5 +1,42 @@
+# Ready to Use Classes
 
-# Using mdWidgets.py
+The following are classes that are ready to use with a simple copy & paste + some extra imports into the existing code base. These have already been tested in a previous stable build though should still be used with caution.
+
+## lockScreen.py
+
+The initial landing page upon first boot up, showcasing all available profiles for user login.
+
+Copy both the `LockScreen` (replace existing) and `UserCard` (entirely new) classes into the build code. 
+
+### Import Statements
+
+The following are known import statements that are required (as of stable build 1209)
+
+```
+from functools import partial
+from kivy.graphics import BoxShadow
+```
+
+Additional import statments may be required. Refer to `lockScreen.py` to verify required imports.
+
+### New Features
+
+The new `LockScreen` has a new functionality that allows for customizable profile icon colors. To utilize this, make sure the `user_data` schema includes a color field, like this:
+
+```
+{
+    "username": "Example User",
+    "password": "666",
+    "color": "green"
+}
+```
+
+Possible colors include: 
+"blue", "red", "green", "lightBlue", "orange", "black", "gray"
+
+The profile color code is backwards compatible, meaning profiles that do not specifiy a color will still work. The behavior when no color field is found is to default to "blue"
+
+# mdWidgets.py
 
 All the components can be found in mdWidgets.py. They can be organized between **universal widgets** that are used repeatedly and necessary on all pages, and **unique components** which are often unique to one specific page.
 

@@ -11,7 +11,7 @@ from kivy.uix.anchorlayout import AnchorLayout
 from kivymd.uix.scrollview import MDScrollView
 from kivy.graphics import BoxShadow, Color
 from kivy.clock import Clock
-from kivy.core.window import Window
+#from kivy.core.window import Window
 
 from mdWidgets import (
     add_debug_outline
@@ -54,61 +54,61 @@ class UserCard(MDCard):
         return super().on_touch_up(touch)
 
 
-class lockScreen(MDScreen):
+class LockScreen(MDScreen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.md_bg_color = (1, 1, 1, 1)
-        self.size_hint = (1, 1)
-        self.size = Window.size
+        # self.md_bg_color = (1, 1, 1, 1)
+        # self.size_hint = (1, 1)
+        # self.size = Window.size
 
         
 
-        user = [
-                {
-                    "username": "123",
-                    "password": "123",
-                    "color": "blue"
-                },
-                {
-                    "username": "80808",
-                    "password": "7355608",
-                    "color": "red"
-                },
-                {
-                    "username": "You think he loves you but I know what he really loves you for it's your leopard skinned pillbox hat",
-                    "password": "7355608",
-                    "color": "green"
-                },
-                {
-                    "username": "80811",
-                    "password": "7355608",
-                    "color": "lightBlue"
-                },
-                {
-                    "username": "80812",
-                    "password": "7355608",
-                    "color": "orange"
-                },
-                {
-                    "username": "80813",
-                    "password": "7355608",
-                    "color": "black"
-                },
-                {
-                    "username": "80814",
-                    "password": "7355608",
-                    "color": "gray"
-                },
-                {
-                    "username": "80814",
-                    "password": "7355608",
+        # user = [
+        #         {
+        #             "username": "123",
+        #             "password": "123",
+        #             "color": "blue"
+        #         },
+        #         {
+        #             "username": "80808",
+        #             "password": "7355608",
+        #             "color": "red"
+        #         },
+        #         {
+        #             "username": "You think he loves you but I know what he really loves you for it's your leopard skinned pillbox hat",
+        #             "password": "7355608",
+        #             "color": "green"
+        #         },
+        #         {
+        #             "username": "80811",
+        #             "password": "7355608",
+        #             "color": "lightBlue"
+        #         },
+        #         {
+        #             "username": "80812",
+        #             "password": "7355608",
+        #             "color": "orange"
+        #         },
+        #         {
+        #             "username": "80813",
+        #             "password": "7355608",
+        #             "color": "black"
+        #         },
+        #         {
+        #             "username": "80814",
+        #             "password": "7355608",
+        #             "color": "gray"
+        #         },
+        #         {
+        #             "username": "80814",
+        #             "password": "7355608",
                     
-                },
-            ]
+        #         },
+        #     ]
         
-        self.users = user
+        self.users = load_users()["users"]
         self.current_index = 0
         self.active_index = None
         self.highlight_min_duration = 0.33
@@ -378,8 +378,8 @@ class lockScreen(MDScreen):
         self.manager.current = "create_user"
 
     def go_to_login(self, *args):
-        # if self.users:
-        #     login_screen = self.manager.get_screen("user_login")
-        #     login_screen.set_user(self.users[self.current_index])
-        #     self.manager.current = "user_login"
-        print(f"login with user {self.users[self.current_index]}")
+        if self.users:
+            login_screen = self.manager.get_screen("user_login")
+            login_screen.set_user(self.users[self.current_index])
+            self.manager.current = "user_login"
+        #print(f"login with user {self.users[self.current_index]}")
